@@ -1,78 +1,132 @@
-const fs = require("fs/promises");
+const Contact = require("./contactsModel");
 
-const listContacts = async () => {
+const listContacts = async (res) => {
   try {
-    const file = await fs.readFile(`${__dirname}/contacts.json`, "utf-8");
-    return JSON.parse(file);
+    const contacts = await Contact.find({});
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        contacts,
+      },
+    });
   } catch (err) {
-    console.error(err.message);
+    res.status(404).json({
+      status: "fail",
+      message: err,
+    });
   }
 };
 
-const getContactById = async (contactId) => {
+const getContactById = async (res, contactId) => {
   try {
-    const contactsList = await listContacts();
-    const contact = contactsList.find((contact) => contact.id === contactId);
+    const contact = await Contact.findById(contactId);
 
-    return contact;
+    res.status(200).json({
+      status: "success",
+      data: {
+        contact,
+      },
+    });
   } catch (err) {
-    console.error(err.message);
+    res.status(404).json({
+      status: "fail",
+      message: err,
+    });
   }
 };
 
-const removeContact = async (contactId) => {
+const removeContact = async (res, contactId) => {
   try {
-    let contactsList = await listContacts();
+    await Contact.findByIdAndDelete(contactId);
 
-    const newList = contactsList.filter((contact) => contact.id !== contactId);
-
-    await fs.writeFile(`${__dirname}/contacts.json`, JSON.stringify(newList));
+    res.status(204).json({
+      status: "success",
+      data: null,
+    });
   } catch (err) {
-    console.error(err.message);
+    res.status(404).json({
+      status: "fail",
+      message: err,
+    });
   }
 };
 
-const addContact = async (body) => {
+const addContact = async (res, body) => {
   try {
-    let contactsList = await listContacts();
+    const newContact = await Contact.create(body);
 
-    const newContact = {
-      id: String(contactsList.length + 1),
-      name: body.name,
-      email: body.email,
-      phone: body.phone,
-    };
-
-    contactsList.push(newContact);
-    await fs.writeFile(
-      `${__dirname}/contacts.json`,
-      JSON.stringify(contactsList)
-    );
-    contactsList = await listContacts();
-
-    return newContact;
+    res.status(200).json({
+      status: "success",
+      data: {
+        contact: newContact,
+      },
+    });
   } catch (err) {
-    console.error(err.message);
+    res.status(404).json({
+      status: "fail",
+      message: err,
+    });
   }
 };
 
-const updateContact = async (contactId, body) => {
-  let contactsList = await listContacts();
-  const [contact] = contactsList.filter((contact) => contact.id === contactId);
-  await removeContact(contactId);
-  contactsList = await listContacts();
+const updateContact = async (res, body, contactId) => {
+  try {
+    const contact = await Contact.findByIdAndUpdate(contactId, body, {
+      new: true,
+      runValidators: true,
+    });
 
-  contact.name = body.name;
-  contact.email = body.email;
-  contact.phone = body.phone;
+    res.status(200).json({
+      status: "success",
+      data: {
+        contact,
+      },
+    });
+  } catch (err) {
+    res.status(404).json({
+      status: "fail",
+      message: err,
+    });
+  }
+};
 
-  contactsList.push(contact);
-  await fs.writeFile(
-    `${__dirname}/contacts.json`,
-    JSON.stringify(contactsList)
-  );
+const updateStatusContact = async (res, body, contactId) => {
+  try {
+    const { favorite } = body;
+    if (typeof favorite !== "boolean") {
+      return res.status(400).json({
+        status: "fail",
+        message: "Favorite must be a boolean value (true or false).",
+      });
+    }
 
-  return contact;
+    const update = { $set: { favorite } };
+
+    const contact = await Contact.findByIdAndUpdate(contactId, update, {
+      new: true,
+      runValidators: true,
+    });
+
+    if (!contact) {
+      return res.status(404).json({
+        status: "fail",
+        message: "Contact not found",
+      });
+    }
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        contact,
+      },
+    });
+  } catch (err) {
+    res.status(404).json({
+      status: "fail",
+      message: err,
+    });
+  }
 };
 
 module.exports = {
@@ -81,4 +135,5 @@ module.exports = {
   removeContact,
   addContact,
   updateContact,
+  updateStatusContact,
 };
