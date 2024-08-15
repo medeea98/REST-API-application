@@ -2,6 +2,12 @@ const User = require("./usersModel");
 const bcrypt = require("bcrypt");
 const Joi = require("joi");
 const jwt = require("jsonwebtoken");
+const gravatar = require("gravatar");
+const path = require("path");
+const jimp = require("jimp");
+const fs = require("fs/promises");
+
+const avatarsDir = path.join(__dirname, "../public/avatars");
 
 const validateUser = (user) => {
   const schema = Joi.object({
@@ -56,9 +62,16 @@ const signup = async (req, res) => {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(password, salt);
 
+    const avatarURL = gravatar.url(email, {
+      s: "200",
+      r: "pg",
+      d: "identicon",
+    });
+
     user = new User({
       email,
       password: hashedPassword,
+      avatarURL,
     });
 
     await user.save();
@@ -67,6 +80,7 @@ const signup = async (req, res) => {
       user: {
         email: user.email,
         subscription: user.subscription,
+        avatarURL: user.avatarURL,
       },
     });
   } catch (err) {
@@ -177,6 +191,32 @@ const updateUserSubscription = async (req, res) => {
   });
 };
 
+const updateAvatar = async (req, res) => {
+  try {
+    const { file, user } = req;
+    const { path: tempPath, filename } = file;
+    const [extension] = filename.split(".").slice(-1);
+    const newFilename = `${user._id}-${Date.now()}.${extension}`;
+    const newPath = path.join(avatarsDir, newFilename);
+
+    const image = await jimp.read(tempPath);
+    await image.resize(250, 250).writeAsync(newPath);
+
+    await fs.unlink(tempPath);
+
+    const avatarURL = `/avatars/${newFilename}`;
+    user.avatarURL = avatarURL;
+
+    await user.save();
+
+    res.status(200).json({ avatarURL });
+  } catch (err) {
+    res.status(500).json({
+      message: "Server Error",
+    });
+  }
+};
+
 module.exports = {
   signup,
   login,
@@ -184,4 +224,5 @@ module.exports = {
   authMiddleware,
   currentUser,
   updateUserSubscription,
+  updateAvatar,
 };
